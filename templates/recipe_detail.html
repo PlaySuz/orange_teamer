@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+    {% if recipe['image_url'] %}
+        <img src="{{ recipe['image_url'] }}" alt="{{ recipe['title'] }}" class="w-full h-80 object-cover">
+    {% endif %}
+    <div class="p-8">
+        <div class="flex justify-between items-start mb-4">
+            <h2 class="text-4xl font-bold text-gray-800">{{ recipe['title'] }}</h2>
+            <span class="bg-orange-100 text-orange-800 text-sm font-semibold px-3 py-1 rounded-full">{{ recipe['category'] }}</span>
+        </div>
+        
+        <div class="flex flex-wrap gap-6 mb-6 text-gray-600 bg-orange-50 p-4 rounded-lg">
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">⏱️</span>
+                <div>
+                    <p class="text-xs uppercase font-bold text-gray-500">Prep Time</p>
+                    <p class="font-semibold">{{ recipe['prep_time'] }} mins</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">🔥</span>
+                <div>
+                    <p class="text-xs uppercase font-bold text-gray-500">Cook Time</p>
+                    <p class="font-semibold">{{ recipe['cook_time'] }} mins</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="text-2xl">🍽️</span>
+                <div>
+                    <p class="text-xs uppercase font-bold text-gray-500">Servings</p>
+                    <p class="font-semibold">{{ recipe['servings'] }}</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-lg text-gray-700 mb-8">{{ recipe['description'] }}</p>
+
+        <div class="grid md:grid-cols-2 gap-8 mb-8">
+            <div class="bg-green-50 p-6 rounded-xl border border-green-100">
+                <h3 class="text-2xl font-bold text-cozy-secondary mb-4">🥕 Ingredients</h3>
+                <pre class="whitespace-pre-wrap font-sans text-gray-700">{{ recipe['ingredients'] }}</pre>
+            </div>
+            <div class="bg-orange-50 p-6 rounded-xl border border-orange-100">
+                <h3 class="text-2xl font-bold text-cozy-primary mb-4">👩‍🍳 Instructions</h3>
+                <pre class="whitespace-pre-wrap font-sans text-gray-700">{{ recipe['instructions'] }}</pre>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap gap-4 pt-6 border-t border-gray-200">
+            <a href="{{ url_for('edit_recipe', recipe_id=recipe['id']) }}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors">Edit Recipe</a>
+            <form action="{{ url_for('delete_recipe', recipe_id=recipe['id']) }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this recipe?');">
+                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors">Delete Recipe</button>
+            </form>
+            <a href="{{ url_for('cookbook') }}" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg transition-colors">Back to Cookbook</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
