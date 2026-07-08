@@ -5,7 +5,8 @@
     <h2 class="text-4xl font-bold text-gray-800 mb-2">Edit Recipe</h2>
 </div>
 
-<form method="POST" action="{{ url_for('edit_recipe', recipe_id=recipe['id']) }}" class="bg-white p-8 rounded-xl shadow-lg space-y-6">
+<!-- FIXED: Changed recipe_id to slug in the form action -->
+<form method="POST" action="{{ url_for('edit_recipe', slug=recipe['slug']) }}" class="bg-white p-8 rounded-xl shadow-lg space-y-6">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="md:col-span-2">
             <label for="title" class="block text-sm font-bold text-gray-700 mb-2">Recipe Title</label>
@@ -48,7 +49,8 @@
     </div>
     <div class="flex gap-4 pt-4">
         <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Update Recipe</button>
-        <a href="{{ url_for('recipe_detail', recipe_id=recipe['id']) }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg transition-colors">Cancel</a>
+        <!-- FIXED: Changed recipe_id to slug in the Cancel button -->
+        <a href="{{ url_for('recipe_detail', slug=recipe['slug']) }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-6 rounded-lg transition-colors">Cancel</a>
     </div>
 </form>
 {% endblock %}

@@ -28,7 +28,8 @@
                     <span>🍽️ Serves: {{ recipe['servings'] }}</span>
                 </div>
 
-                <a href="{{ url_for('recipe_detail', recipe_id=recipe['id']) }}" class="w-full text-center bg-cozy-primary hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                <!-- THIS IS THE FIXED LINE: Changed recipe_id=recipe['id'] to slug=recipe['slug'] -->
+                <a href="{{ url_for('recipe_detail', slug=recipe['slug']) }}" class="w-full text-center bg-cozy-primary hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
                     View Recipe
                 </a>
             </div>

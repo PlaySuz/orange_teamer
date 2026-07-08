@@ -1,83 +1,56 @@
-import sqlite3
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, g
+import re
+import unicodedata
+from flask import Flask, render_template, request, redirect, url_for, flash
+from supabase import create_client, Client
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_cozy_kitchen_key'
-DATABASE = 'kitchen_hearth.db'
 
-def get_db():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
-    return g.db
+# --- Supabase Configuration ---
+SUPABASE_URL = "https://zozsojlszffjcpfwzlpf.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvenNvamxzemZmamNwZnd6bHBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDIyNTcsImV4cCI6MjA5ODQ3ODI1N30.HIMh7UPORg1XqSLAz18XVbJehm-OojNI-wYDhGQgCvc" # <--- PASTE YOUR ANON KEY HERE!
 
-@app.teardown_appcontext
-def close_db(exception):
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
+# Initialize Supabase Client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def init_db():
-    db = get_db()
-    
-    # 1. Create the base table if it doesn't exist at all
-    db.execute('''
-        CREATE TABLE IF NOT EXISTS recipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT,
-            ingredients TEXT,
-            instructions TEXT,
-            image_url TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # 2. AUTOMATIC DATABASE MIGRATION: Check for missing columns and add them
-    cursor = db.execute("PRAGMA table_info(recipes)")
-    existing_columns = [row[1] for row in cursor.fetchall()]
-    
-    if 'prep_time' not in existing_columns:
-        db.execute("ALTER TABLE recipes ADD COLUMN prep_time INTEGER DEFAULT 0")
-    if 'cook_time' not in existing_columns:
-        db.execute("ALTER TABLE recipes ADD COLUMN cook_time INTEGER DEFAULT 0")
-    if 'servings' not in existing_columns:
-        db.execute("ALTER TABLE recipes ADD COLUMN servings INTEGER DEFAULT 1")
-    if 'category' not in existing_columns:
-        db.execute("ALTER TABLE recipes ADD COLUMN category TEXT DEFAULT 'General'")
-        
-    db.commit()
-    
-    # 3. Seed the database with the Classic Sourdough recipe if the table is completely empty
-    cursor = db.execute('SELECT COUNT(*) FROM recipes')
-    if cursor.fetchone()[0] == 0:
-        db.execute('''
-            INSERT INTO recipes (title, description, ingredients, instructions, image_url, prep_time, cook_time, servings, category)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            'Classic Sourdough',
-            'A beautifully crusty, tangy, and chewy sourdough bread made with a simple starter.',
-            '500g bread flour\n350g water\n100g active sourdough starter\n10g salt',
-            '1. Mix flour and water, autolyse for 1 hour.\n2. Add starter and salt, fold to combine.\n3. Bulk ferment for 4-5 hours, doing stretch and folds every 30 mins.\n4. Shape and proof in the fridge overnight.\n5. Bake in a Dutch oven at 450F for 20 mins covered, 20 mins uncovered.',
-            'https://images.unsplash.com/photo-1585478259715-876acc5be8eb?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-            240, 45, 8, 'Bread'
-        ))
-        db.commit()
+# --- Slug Generation Helpers ---
+def generate_slug(text):
+    """Converts a string into a URL-friendly slug."""
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+    text = text.lower()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '-', text)
+    return text.strip('-')
 
+def get_unique_slug(title):
+    """Ensures the generated slug is unique in the database."""
+    base_slug = generate_slug(title)
+    slug = base_slug
+    counter = 1
+    while True:
+        # Check if slug exists
+        response = supabase.table('recipes').select('id').eq('slug', slug).execute()
+        if not response.data:
+            return slug
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+# --- Routes ---
 @app.route('/')
 def cookbook():
-    db = get_db()
-    recipes = db.execute('SELECT * FROM recipes ORDER BY created_at DESC').fetchall()
+    # Fetch all recipes ordered by creation date
+    response = supabase.table('recipes').select('*').order('created_at', desc=True).execute()
+    recipes = response.data
     return render_template('cookbook.html', recipes=recipes)
 
-@app.route('/recipe/<int:recipe_id>')
-def recipe_detail(recipe_id):
-    db = get_db()
-    recipe = db.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
-    if recipe is None:
+@app.route('/recipe/<slug>')
+def recipe_detail(slug):
+    response = supabase.table('recipes').select('*').eq('slug', slug).execute()
+    if not response.data:
         flash('Recipe not found.', 'error')
         return redirect(url_for('cookbook'))
+    recipe = response.data[0]
     return render_template('recipe_detail.html', recipe=recipe)
 
 @app.route('/share', methods=['GET', 'POST'])
@@ -89,7 +62,6 @@ def share_recipe():
         instructions = request.form['instructions']
         image_url = request.form.get('image_url', '')
         
-        # Handle new numeric fields safely
         prep_time = int(request.form.get('prep_time') or 0)
         cook_time = int(request.form.get('cook_time') or 0)
         servings = int(request.form.get('servings') or 1)
@@ -98,21 +70,35 @@ def share_recipe():
         if not title:
             flash('Title is required!', 'error')
         else:
-            db = get_db()
-            db.execute(
-                'INSERT INTO recipes (title, description, ingredients, instructions, image_url, prep_time, cook_time, servings, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (title, description, ingredients, instructions, image_url, prep_time, cook_time, servings, category)
-            )
-            db.commit()
+            unique_slug = get_unique_slug(title)
+            
+            new_recipe = {
+                'title': title,
+                'description': description,
+                'ingredients': ingredients,
+                'instructions': instructions,
+                'image_url': image_url,
+                'prep_time': prep_time,
+                'cook_time': cook_time,
+                'servings': servings,
+                'category': category,
+                'slug': unique_slug
+            }
+            
+            supabase.table('recipes').insert(new_recipe).execute()
             flash('Recipe shared successfully!', 'success')
             return redirect(url_for('cookbook'))
 
     return render_template('share_recipe.html')
 
-@app.route('/recipe/<int:recipe_id>/edit', methods=['GET', 'POST'])
-def edit_recipe(recipe_id):
-    db = get_db()
-    recipe = db.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,)).fetchone()
+@app.route('/recipe/<slug>/edit', methods=['GET', 'POST'])
+def edit_recipe(slug):
+    response = supabase.table('recipes').select('*').eq('slug', slug).execute()
+    if not response.data:
+        flash('Recipe not found.', 'error')
+        return redirect(url_for('cookbook'))
+    
+    recipe = response.data[0]
     
     if request.method == 'POST':
         title = request.form['title']
@@ -126,25 +112,30 @@ def edit_recipe(recipe_id):
         servings = int(request.form.get('servings') or 1)
         category = request.form.get('category', 'General')
 
-        db.execute(
-            'UPDATE recipes SET title = ?, description = ?, ingredients = ?, instructions = ?, image_url = ?, prep_time = ?, cook_time = ?, servings = ?, category = ? WHERE id = ?',
-            (title, description, ingredients, instructions, image_url, prep_time, cook_time, servings, category, recipe_id)
-        )
-        db.commit()
+        updated_data = {
+            'title': title,
+            'description': description,
+            'ingredients': ingredients,
+            'instructions': instructions,
+            'image_url': image_url,
+            'prep_time': prep_time,
+            'cook_time': cook_time,
+            'servings': servings,
+            'category': category
+        }
+
+        # Update by ID to keep the original URL slug intact (good for SEO)
+        supabase.table('recipes').update(updated_data).eq('id', recipe['id']).execute()
         flash('Recipe updated successfully!', 'success')
-        return redirect(url_for('recipe_detail', recipe_id=recipe_id))
+        return redirect(url_for('recipe_detail', slug=slug))
 
     return render_template('edit_recipe.html', recipe=recipe)
 
-@app.route('/recipe/<int:recipe_id>/delete', methods=['POST'])
-def delete_recipe(recipe_id):
-    db = get_db()
-    db.execute('DELETE FROM recipes WHERE id = ?', (recipe_id,))
-    db.commit()
+@app.route('/recipe/<slug>/delete', methods=['POST'])
+def delete_recipe(slug):
+    supabase.table('recipes').delete().eq('slug', slug).execute()
     flash('Recipe deleted.', 'success')
     return redirect(url_for('cookbook'))
 
 if __name__ == '__main__':
-    with app.app_context():
-        init_db()
     app.run(debug=True)
